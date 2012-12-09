@@ -159,6 +159,8 @@ make_host(char* h, host_t* host)
 	char* host_ip 	= strtok_r(h, ",", &saveptr_host);
 	char* host_port	= strtok_r(NULL, "", &saveptr_host);
 
+	if(debug)
+		printf("%s, %s\n", host_ip, host_port);
 	memcpy(host->ip, host_ip, sizeof(host->ip));
 	host->port = atoi(host_port);
 }
@@ -185,6 +187,9 @@ read_topology()
 		//ignore empyt lines
 		if(strlen(line) <= 1) 
 			continue;
+
+		if(debug)
+			printf("Line: %s\n", line);
 
 		topology_entry_t entry;
 
@@ -222,13 +227,6 @@ read_topology()
 }
 
 void
-print_host(host_t* h)
-{
-	printf("Host IP: %s 	Host Port: %d\n", h->ip, h->port);
-}
-
-
-void
 get_my_IP(char* ip)
 {
 	struct hostent* emulator_host;
@@ -239,9 +237,10 @@ get_my_IP(char* ip)
 	emulator_host = gethostbyname(emulator_hostname);
 
 	bcopy(emulator_host->h_addr, (char*) &emulator.sin_addr, emulator_host->h_length);
-	memcpy(ip, inet_ntoa(emulator.sin_addr), MAX_LINE);
-	printf("My IP is %s\n", ip);
+	char* emulator_ip_dot_notation = inet_ntoa(emulator.sin_addr);
+	printf("My IP is %s\n", emulator_ip_dot_notation);
 
+	memcpy(ip, emulator_ip_dot_notation, sizeof(emulator_ip_dot_notation));
 }
 
 void
@@ -250,7 +249,6 @@ get_my_host_struct(host_t* h)
 	// Get my IP in dot notation
 	char my_IP[MAX_LINE];
 	get_my_IP(my_IP);
-
 	memcpy(h->ip, my_IP, sizeof(my_IP));
 
 	h->port 	= PORT;
@@ -260,34 +258,24 @@ get_my_host_struct(host_t* h)
 void
 make_list_entry(host_t* this, host_t* from, list_entry_t* entry, int cost)
 {
+
 	entry->cost = cost;
-	memcpy(&(entry->this_host), this, sizeof(host_t));
-	memcpy(&(entry->reached_from), from, sizeof(host_t));
+	entry->this_host = *this;
+	entry->reached_from = *from;
 }
 
 void
 add_entry_to_list(list_entry_t* h, list_t* l)
 {
-	memcpy(&(l->entries[l->num_entries]), h, sizeof(list_entry_t));
-	(l->num_entries)++;
+	l->entries[l->num_entries] = *h;
+	(l->num_entries) += 1;
 }
 
 void
-update_list_entry(host_t* from, list_entry_t* entry, int cost)
+update_list_entry(host_t* from, list_entry_t* entry)
 {
-	entry->cost = cost;
+	(entry->cost)++;
 	entry->reached_from = *from;
-}
-
-void
-print_neighbours(host_t* neighbours, int n)
-{
-	printf("NEIGHBOURS:\n");
-	int i;
-	for(i = 0; i < n; i++)
-	{
-		print_host(&(neighbours[i]));
-	}
 }
 
 //get neighbouring nodes of node h
@@ -299,11 +287,9 @@ get_neighbours_of(host_t* h, host_t* neighbours)
 	//find entry in topology table for h
 	int i;
 	for(i = 0; i < table.num_nodes; i++){
-
 		if(strcmp(table.entries[i].node.ip, h->ip) == 0)
 		{
-			memcpy(neighbours, &(table.entries[i].neighbours[0]), MAX_NODES * sizeof(host_t));
-
+			memcpy(neighbours, table.entries[i].neighbours, MAX_NODES * sizeof(host_t));
 			//return number of neighbours
 			return table.entries[i].num_neighbours;
 		}
@@ -327,44 +313,8 @@ is_in(host_t* h, list_t* list, int num)
 	return false;
 }
 
-//returns pointer to entry for host h in list
-list_entry_t*
-get_entry(host_t* h, list_t* list)
-{
-	int i;
-	for(i = 0; i < list->num_entries; i++)
-	{
-		if(strcmp((list->entries[i]).this_host.ip, h->ip) == 0)
-		{
-			return &(list->entries[i]);
-		}
-	}
-	return NULL;
-}
-
 void
-remove_entry(host_t* h, list_t* list)
-{
-	int i;
-	int invalid_index;
-	for(i = 0; i < list->num_entries; i++)
-	{
-		if(strcmp((list->entries[i]).this_host.ip, h->ip) == 0)
-		{
-			invalid_index = i;
-		}
-	}
-
-	for(i = invalid_index+1; i < list->num_entries; i++)
-	{
-		list->entries[i-1] = list->entries[i];
-	}
-
-	list->num_entries--;
-}
-
-void
-get_entry_with_lowest_cost(list_entry_t* lowest, list_t* l)
+get_entry_with_lowest_cost(host_t* lowest, list_t* l)
 {
 	int lowest_cost_index = 0;
 	int i;
@@ -376,21 +326,9 @@ get_entry_with_lowest_cost(list_entry_t* lowest, list_t* l)
 		}
 	}
 
-	memcpy(lowest, &(l->entries[lowest_cost_index]), sizeof(list_entry_t));
+	memcpy(lowest, &(l->entries[lowest_cost_index].this_host), sizeof(host_t));
 }
 
-void 
-print_list(list_t* l)
-{
-	printf("		Node 		Cost 		Reached from\n");
-	int i;
-	for(i = 0; i < l->num_entries; i++)
-	{
-		list_entry_t le = l->entries[i];
-		printf("	%s 		%d 			%s\n", le.this_host.ip, le.cost, le.reached_from.ip);
-	}
-
-}
 
 int
 calc_shortest_path()
@@ -409,12 +347,6 @@ calc_shortest_path()
 	memcpy(&next, &h, sizeof(host_t));
 
 	while(1){
-		printf("\n");
-		if(debug) 
-		{
-			printf("Next: ");
-			print_host(&next);
-		}
 		// 2. For the node just added to the Confirmed list in the previous step,
 		// call it node Next and select its LSP
 		next = confirmed.entries[confirmed.num_entries-1].this_host;
@@ -427,26 +359,18 @@ calc_shortest_path()
 		// 3. For each neighbor (Neighbor) of Next, calculate the cost (Cost) to
 		// reach this Neighbor as the sum of the cost from myself to Next and
 		// from Next to Neighbor.
-
-		//calculate cost outside of loop because all weights = 1
-		list_entry_t next_entry = confirmed.entries[confirmed.num_entries-1];
-		int cost = next_entry.cost + LINK_COST;
-		
 		int i;
 		for(i = 0; i < num_neighbours; i++)
 		{
 			host_t curr = neighbours[i];
-			print_host(&curr);
-
 			// (a) If Neighbor is currently on neither the Confirmed nor the
 			// Tentative list, then add (Neighbor, Cost, NextHop) to the
 			// Tentative list, where NextHop is the direction I go to reach Next.
 
 			if(!is_in(&curr, &confirmed, confirmed.num_entries) && !is_in(&curr, &tentative, tentative.num_entries))
 			{
-				printf("Entry is not in Confirmed or Tentative. Added to Tentative.\n");
 				list_entry_t ne; //neighbour entry
-				make_list_entry(&curr, &next, &ne, cost);
+				make_list_entry(&curr, &curr, &ne, LINK_COST);
 				add_entry_to_list(&ne, &tentative);
 
 			}
@@ -454,44 +378,21 @@ calc_shortest_path()
 			// (b) If Neighbor is currently on the Tentative list, and the Cost is less than the currently listed cost for Neighbor, then replace the current entry with (Neighbor, Cost, NextHop), where NextHop is the direction I go to reach Next.
 			else if(is_in(&curr, &tentative, tentative.num_entries))
 			{
-				printf("Entry is in Tentative\n");
-				list_entry_t* ne; //list entry
-				ne = get_entry(&curr, &tentative);
 
-				if(ne != NULL && ne->cost > cost)
-				{
-					printf("Cost is less than currently listed\n");
-					update_list_entry(&(next_entry.reached_from), ne, cost);
-				}
-			}
-			else{
-				printf("Entry is in Confirmed\n");
 			}
 		}
 
 	// 4. If the Tentative list is empty, stop. Otherwise, pick the entry from
-	// the Tentative list with the lowest cost, move it to the Confirmed list,
+	// the Tentative list with the lowthe lowest cost, move it to the Confirmed list,
 	// and return to step 2.
-		printf("CONFIRMED:\n");
-		print_list(&confirmed);
-		printf("TENTATIVE:\n");
-		print_list(&tentative);
-		if(tentative.num_entries <= 0)
+		if(tentative.num_entries == 0)
 		{
 			break;
 		}
-		else 
-		{
-			list_entry_t lowest;
-			get_entry_with_lowest_cost(&lowest, &tentative); 
-
-			add_entry_to_list(&lowest, &confirmed);
-
-			remove_entry(&(lowest.this_host), &tentative);
+		else {
+			
 		}
 	}
-
-	print_list(&confirmed);
 	return 0;
 
 }

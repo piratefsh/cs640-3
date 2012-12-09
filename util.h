@@ -1,4 +1,5 @@
 #include <stdbool.h>
+#include <sys/time.h>
 
 #ifndef UTIL
 #define UTIL
