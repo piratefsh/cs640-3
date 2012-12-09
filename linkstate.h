@@ -2,7 +2,7 @@
 #define LINKSTATE
 
 #define MAX_NODES 	20		//maximum number of nodes in the topology
-#define IP_LEN 		32 		//number of chars in an IP address in dot notation
+#define IP_LEN 		128 		//number of chars in an IP address in dot notation
 #include <stdbool.h>
 //single host in network
 typedef struct __host_t
@@ -18,6 +18,7 @@ typedef struct __topology_entry_t
 {
 	host_t node;	//node this entry is for
 	host_t neighbours[MAX_NODES];
+    int num_neighbours;
 	int cost;
 
 }topology_entry_t;

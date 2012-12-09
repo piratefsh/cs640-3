@@ -5,7 +5,7 @@
 typedef struct __list_entry_t
 {
 	int cost;
-	host_t this;
+	host_t this_host;
 	host_t reached_from;
 
 }list_entry_t;
