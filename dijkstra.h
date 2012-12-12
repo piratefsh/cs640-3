@@ -18,6 +18,6 @@ typedef struct __list_t
 }list_t;
 
 
-int read_topology(topology_table_t* table, char* topology_table);
+void read_topology(topology_table_t* table, char* topology_table);
 int calc_shortest_path(list_t* confirmed, topology_table_t* table, int port);
 #endif

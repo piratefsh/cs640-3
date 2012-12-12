@@ -7,12 +7,13 @@
 #include <stdlib.h>
 #include <unistd.h>
 #include <netdb.h>
+#include <stdbool.h>
 
 #ifndef LINKSTATEC
 #define LINKSTATEC
 
 static int debug = 1;
-int LINK_COST = 1;
+static int LINK_COST = 1;
 
 
 void
@@ -26,9 +27,53 @@ make_host(char* h, host_t* host)
     host->port = atoi(host_port);
 }
 
+void
+get_my_IP(char* ip)
+{
+    struct hostent* emulator_host;
+    struct sockaddr_in emulator;
+
+    char emulator_hostname[MAX_LINE];
+    gethostname(emulator_hostname, sizeof(emulator_hostname));
+    emulator_host = gethostbyname(emulator_hostname);
+
+    bcopy(emulator_host->h_addr, (char*) &emulator.sin_addr, emulator_host->h_length);
+    memcpy(ip, inet_ntoa(emulator.sin_addr), MAX_LINE);
+    printf("My IP is %s\n", ip);
+
+}
+
+
+void
+get_my_host_struct(host_t* h, int port)
+{
+    // Get my IP in dot notation
+    char my_IP[MAX_LINE];
+    get_my_IP(my_IP);
+
+    memcpy(h->ip, my_IP, sizeof(my_IP));
+
+    h->port     = port;
+    h->online   = true;
+}
+
+
+void
+print_host(host_t* h)
+{
+    printf("Host IP: %s     Host Port: %d\n", h->ip, h->port);
+}
+
+
+//builds topology table. returns true if this host is in table, false otherwise
 int
 read_topology(topology_table_t* table, char* topology_table)
 {
+    host_t this_host;
+    get_my_host_struct(&this_host, 0);
+
+    int found_this_host = 0; //to flag if this host is in table or not 
+
     FILE* fp;
     if((fp = fopen(topology_table, "rt")) == NULL)
     {
@@ -58,6 +103,11 @@ read_topology(topology_table_t* table, char* topology_table)
         {
             //grab the node of this entry
             make_host(h, &(entry.node));
+            print_host(&(entry.node));
+            if(strcmp(entry.node.ip, this_host.ip) == 0)
+            {
+                found_this_host = 1;
+            }
         }
 
         //grab neighbours and stuff them into entry
@@ -78,47 +128,14 @@ read_topology(topology_table_t* table, char* topology_table)
     }                             
 
     table->num_nodes = num_nodes;
+
     if(debug)
         printf("Built topology table\n");
     return 0;
 }
 
 
-void
-print_host(host_t* h)
-{
-    printf("Host IP: %s     Host Port: %d\n", h->ip, h->port);
-}
 
-
-void
-get_my_IP(char* ip)
-{
-    struct hostent* emulator_host;
-    struct sockaddr_in emulator;
-
-    char emulator_hostname[MAX_LINE];
-    gethostname(emulator_hostname, sizeof(emulator_hostname));
-    emulator_host = gethostbyname(emulator_hostname);
-
-    bcopy(emulator_host->h_addr, (char*) &emulator.sin_addr, emulator_host->h_length);
-    memcpy(ip, inet_ntoa(emulator.sin_addr), MAX_LINE);
-    printf("My IP is %s\n", ip);
-
-}
-
-void
-get_my_host_struct(host_t* h, int port)
-{
-    // Get my IP in dot notation
-    char my_IP[MAX_LINE];
-    get_my_IP(my_IP);
-
-    memcpy(h->ip, my_IP, sizeof(my_IP));
-
-    h->port     = port;
-    h->online   = true;
-}
 
 void
 make_list_entry(host_t* this, host_t* from, list_entry_t* entry, int cost)
@@ -258,6 +275,9 @@ print_list(list_t* l)
 int
 calc_shortest_path(list_t* confirmed, topology_table_t* table, int port)
 {
+    if(debug)
+        printf("Start calculating Dijkstra\n");
+
     list_t tentative;
 
     //  1. Initialize the Confirmed list with an entry for myself; this entry has a cost of 0.
